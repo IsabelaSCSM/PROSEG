@@ -1,4 +1,4 @@
-var CACHE="proseg-v1";
+var CACHE="proseg-v2";
 var SHELL=["./","./index.html","./manifest.webmanifest"];
 
 self.addEventListener("install",function(e){
@@ -10,17 +10,16 @@ self.addEventListener("activate",function(e){
 self.addEventListener("fetch",function(e){
   if(e.request.method!=="GET")return;
   var url=new URL(e.request.url);
+  if(url.origin!==location.origin)return;
   // Dados das rodovias: sempre rede; o app guarda offline via IndexedDB.
   if(url.pathname.indexOf("rodovias")>=0 && url.pathname.indexOf(".json")>=0) return;
-  // Shell: cache primeiro, com atualização e fallback.
+  // Shell: REDE primeiro (sempre a versao mais nova), cai para o cache se estiver offline.
   e.respondWith(
-    caches.match(e.request).then(function(r){
-      return r || fetch(e.request).then(function(resp){
-        if(resp && resp.status===200 && url.origin===location.origin){
-          var cp=resp.clone(); caches.open(CACHE).then(function(c){c.put(e.request,cp);});
-        }
-        return resp;
-      }).catch(function(){ return caches.match("./index.html"); });
+    fetch(e.request).then(function(resp){
+      if(resp && resp.status===200){ var cp=resp.clone(); caches.open(CACHE).then(function(c){c.put(e.request,cp);}); }
+      return resp;
+    }).catch(function(){
+      return caches.match(e.request).then(function(r){ return r || caches.match("./index.html"); });
     })
   );
 });
