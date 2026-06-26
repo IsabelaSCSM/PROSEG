@@ -221,8 +221,8 @@
       </div>
       <div class="cartao">
         <h2>Enviar para a planilha de medição</h2>
-        <p class="dica">Gera os dados na ordem das colunas, com o <b>Km dividido em Km + Metros</b>. Copie e cole na célula <b>C9</b> — a coluna B (imagens) não é alterada.</p>
-        <button class="btn btn-primario" onclick="copiarPlanilha()">⧉ Copiar para colar na planilha (a partir de C9)</button>
+        <p class="dica">Gera as <b>12 colunas</b> da sua planilha (RODOVIA → OBSERVAÇÃO), só as placas medidas. Cole na célula <b>C27</b>.</p>
+        <button class="btn btn-primario" onclick="copiarPlanilha()">⧉ Copiar para colar na planilha (a partir de C27)</button>
         <button class="btn btn-linha" style="margin-top:8px" onclick="baixarCSV()">⬇ Baixar CSV completo (com GPS e data)</button>
         <button class="btn btn-sec" style="margin-top:8px" onclick="compartilhar()">↗ Enviar arquivo por WhatsApp / e-mail</button>
       </div>
@@ -258,7 +258,7 @@ var manifest=[], rodAtual=null, placas=[], IMGS=[], cfg={empresa:"",tecnico:"",m
 var atual=null, sujo=false, gpsTmp=null, atualGrupo=[], vAtual="rod", filtroStatus="todas";
 
 function novaLista(arr){return arr.map(function(d,i){return{
-  id:"p"+i, imgIdx:i, cod:d.cod, kmP:d.kmP, sup:d.sup, qtd:d.qtd, larg:d.larg, altP:d.altP, area:d.area,
+  id:"p"+i, imgIdx:i, cod:d.cod, kmP:d.kmP, sup:d.sup, qtd:d.qtd, larg:d.larg, altP:d.altP, area:d.area, pel:d.pel||"",
   status:"pendente", kmOk:"", altura:"", pinus:"", foto:"", obs:"", lat:"",lng:"",gpsAcc:"", dataHora:""
 };});}
 function persist(){ if(DB&&rodAtual) idbPut("trab",rodAtual,placas); }
@@ -404,7 +404,7 @@ function abrirFicha(id){
     (_img?'<img class="placa-img" src="'+_img+'" onclick="zoom('+_ix+')" alt="Projeto da placa">':'')+
     "<b>Projeto:</b> "+esc(p.sup||"--")+
     '<div class="grid"><span>Qtde: <b>'+esc(p.qtd||"--")+'</b></span><span>Área: <b>'+esc(p.area||"--")+'</b> m²</span>'+
-    '<span>Dim.: <b>'+esc(p.larg||"--")+' × '+esc(p.altP||"--")+'</b> m</span></div>';
+    '<span>Dim.: <b>'+esc(p.larg||"--")+' × '+esc(p.altP||"--")+'</b> m</span><span>Película: <b>'+esc(p.pel||"--")+'</b></span></div>';
   document.getElementById("fAltura").value=p.altura||"";
   document.getElementById("fFoto").value=p.foto||sugereFoto();
   document.getElementById("fObs").value=p.obs||"";
@@ -493,11 +493,14 @@ function salvarLote(){
 /* ====== Exportação ====== */
 function renderResumo(){document.getElementById("rOk").textContent=placas.filter(function(p){return p.status==="medida";}).length;document.getElementById("rPend").textContent=placas.filter(function(p){return p.status!=="medida";}).length;}
 function splitKm(s){s=(s||"").trim();var p=s.split("+");var km=p[0]||"";var m=(p.length>1?p[1]:"").split(",")[0].trim();return[km,m];}
-var COLS_PLAN=["Código","Medição","Km","Metros","Km Instalado (S/N)","Suporte (Tipo)","Qtde (un.)","Casca de Pinus (S/N)","Altura Suporte Instalado (m)","Largura","Altura","Área (m²)","Foto"];
-function linhaPlan(p){var med=p.status==="medida";var k=(p.kmOk==="N")?["",""]:splitKm(p.kmP);return[p.cod, med?(cfg.medicao||""):"", k[0], k[1], med?p.kmOk:"", p.sup, p.qtd, med?p.pinus:"", med?p.altura:"", p.larg, p.altP, p.area, med?p.foto:""];}
-function copiarPlanilha(){var txt=placas.map(function(p){return linhaPlan(p).map(function(v){return v==null?"":(""+v);}).join("\t");}).join("\n");copiar(txt, placas.length+" linhas copiadas — cole na célula C9 da planilha");}
-var COLS_CSV=COLS_PLAN.concat(["Rodovia","Empresa","Técnico","Data/Hora","Latitude","Longitude","Precisão GPS (m)","Observações"]);
-function linhaCSV(p){return linhaPlan(p).concat([rodAtual||"",cfg.empresa||"",cfg.tecnico||"",p.dataHora||"",p.lat||"",p.lng||"",p.gpsAcc||"",p.obs||""]);}
+function rodBase(){return (rodAtual||"").replace(/\s*\(.*\)\s*$/,"").trim();}
+function simNao(v){return v==="S"?"Sim":(v==="N"?"Não":"");}
+// 12 colunas para colar a partir de C27 na planilha de medição
+var COLS_PLAN=["Rodovia","Placa","Km","Fração","Suporte","Qtde Suporte","Altura do Suporte","Casca de Pinus","Tipo Película","Área (m²)","Fotos","Observação"];
+function linhaPlan(p){var k=splitKm(p.kmP);return[rodBase(), p.cod, k[0], k[1], p.sup, p.qtd, p.altura, simNao(p.pinus), p.pel||"", p.area, p.foto, p.obs||""];}
+function copiarPlanilha(){var med=placas.filter(function(p){return p.status==="medida";});if(!med.length){toast("Nenhuma placa medida ainda");return;}var txt=med.map(function(p){return linhaPlan(p).map(function(v){return v==null?"":(""+v);}).join("\t");}).join("\n");copiar(txt, med.length+" placas copiadas — cole na célula C27 da planilha");}
+var COLS_CSV=COLS_PLAN.concat(["Km Instalado (S/N)","Medição","Empresa","Técnico","Data/Hora","Latitude","Longitude","Precisão GPS (m)"]);
+function linhaCSV(p){return linhaPlan(p).concat([simNao(p.kmOk),cfg.medicao||"",cfg.empresa||"",cfg.tecnico||"",p.dataHora||"",p.lat||"",p.lng||"",p.gpsAcc||""]);}
 function montaCSV(){var c=";";var h=COLS_CSV.join(c);var corpo=placas.filter(function(p){return p.status==="medida";}).map(function(p){return linhaCSV(p).map(campoCSV).join(c);}).join("\r\n");return "\uFEFF"+h+"\r\n"+corpo;}
 function campoCSV(v){v=(v==null?"":""+v);if(/[";\n]/.test(v))v='"'+v.replace(/"/g,'""')+'"';return v;}
 function nomeArq(){var d=new Date(),z=function(n){return(n<10?"0":"")+n;};return (rodAtual||"medicao").replace(/[^\w-]/g,"_")+"_vertical_"+(cfg.medicao?("med"+cfg.medicao+"_"):"")+d.getFullYear()+z(d.getMonth()+1)+z(d.getDate())+".csv";}
