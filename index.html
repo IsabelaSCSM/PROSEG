@@ -118,6 +118,8 @@
   .placa .selo{white-space:nowrap}
   .selo.retro{background:var(--verde-esc);color:#fff}
   .selo.retropend{background:#8a6d00;color:#fff}
+  .retro-res{margin-top:8px;font-size:13px;color:var(--cinza)}
+  .retro-res b{color:var(--tinta)}
 </style>
 </head>
 <body>
@@ -256,6 +258,11 @@
         <button class="btn btn-primario" onclick="copiarPlanilha()">⧉ Copiar para colar na planilha (a partir de C27)</button>
         <button class="btn btn-linha" style="margin-top:8px" onclick="baixarCSV()">⬇ Baixar CSV completo (com GPS e data)</button>
         <button class="btn btn-sec" style="margin-top:8px" onclick="compartilhar()">↗ Enviar arquivo por WhatsApp / e-mail</button>
+      </div>
+      <div class="cartao">
+        <h2>Enviar para a planilha de retro</h2>
+        <p class="dica">Gera as colunas da sua aba de lançamento (<b>B a V</b>), uma linha por cor, só placas com ensaio. Calcula <b>Média, Mínimo NBR e Status</b>. Cole na <b>aba de retro</b>, na 1ª linha de dados (<b>B13</b>). Formato, Classificação e Data de fabricação saem em branco para você preencher.</p>
+        <button class="btn btn-primario" onclick="copiarRetro()">🔦 Copiar dados de retro</button>
       </div>
       <div class="aviso">⚠️ Os dados ficam salvos neste aparelho. Exporte ao fim de cada trecho ou dia. Internet só é necessária para baixar rodovias e enviar o arquivo final.</div>
     </section>
@@ -454,6 +461,17 @@ function voltarFicha(){sujo=false;irPara("lista");}
 
 /* ====== Retrorrefletância ====== */
 var CORES_RETRO=["Branca","Vermelha","Amarela","Lima Limão","Azul","Verde","Marrom","Laranja"];
+/* Coeficientes mínimos (cd/lx/m²) na geometria 0,2º / -4°, por tipo de película e cor */
+var MIN_NBR={
+  "I":   {"Branca":70,"Amarela":50,"Laranja":25,"Verde":9,"Vermelha":14,"Azul":4,"Marrom":1},
+  "III": {"Branca":360,"Amarela":270,"Laranja":145,"Verde":50,"Vermelha":65,"Azul":30,"Marrom":18,"Lima Limão":290},
+  "X":   {"Branca":580,"Amarela":435,"Laranja":200,"Verde":58,"Vermelha":87,"Azul":26,"Marrom":17,"Lima Limão":460}
+};
+var COR_EXP={"Branca":"BRANCO","Vermelha":"VERMELHO","Amarela":"AMARELO","Lima Limão":"LIMA-LIMÃO","Azul":"AZUL","Verde":"VERDE","Marrom":"MARROM","Laranja":"LARANJA"};
+function tipoPelKey(pel){var s=(pel||"").toUpperCase();if(s.indexOf("III")>=0)return "III";if(s.indexOf("X")>=0)return "X";if(s.indexOf("I")>=0)return "I";return "";}
+function ladoCurto(cod){var c=(cod||"").toUpperCase();if(/LD/.test(c))return "LD";if(/LE/.test(c))return "LE";if(/LC/.test(c))return "LC";return "";}
+function mediaLeituras(arr){var ns=(arr||[]).map(function(v){return parseFloat(String(v).replace(",","."));}).filter(function(x){return !isNaN(x);});if(!ns.length)return null;var s=0;ns.forEach(function(x){s+=x;});return Math.round(s/ns.length*10)/10;}
+function minimoDe(pel,cor){var k=tipoPelKey(pel);if(!k||!MIN_NBR[k])return null;var m=MIN_NBR[k][cor];return (m==null?null:m);}
 var retroSujo=false, retroPlaca=null;
 function temRetro(p){return !!(p&&p.retro&&p.retro.cores&&p.retro.cores.length);}
 function ladoDe(cod){var c=(cod||"").toUpperCase();if(/LD/.test(c))return "Direito";if(/LE/.test(c))return "Esquerdo";if(/LC/.test(c))return "Central";return "--";}
@@ -461,12 +479,26 @@ function corOptions(sel){return CORES_RETRO.map(function(c){return '<option valu
 function corBlocoHTML(cor,leituras){
   leituras=leituras||["","","","",""];
   var lts="";
-  for(var i=0;i<5;i++){lts+='<div class="lt"><label>Leitura '+(i+1)+'</label><input type="text" inputmode="decimal" class="rt-l" placeholder="0,0" value="'+esc(leituras[i]||"")+'" oninput="retroSujo=true"></div>';}
+  for(var i=0;i<5;i++){lts+='<div class="lt"><label>Leitura '+(i+1)+'</label><input type="text" inputmode="decimal" class="rt-l" placeholder="0,0" value="'+esc(leituras[i]||"")+'" oninput="retroSujo=true;recalcBloco(this)"></div>';}
   return '<div class="retro-cor">'+
-    '<div class="topo"><select class="rt-cor" onchange="retroSujo=true">'+corOptions(cor||"Branca")+'</select>'+
+    '<div class="topo"><select class="rt-cor" onchange="retroSujo=true;recalcBloco(this)">'+corOptions(cor||"Branca")+'</select>'+
     '<button type="button" class="rm" onclick="removerCor(this)" title="Excluir cor">✕</button></div>'+
-    '<div class="retro-leituras">'+lts+'</div></div>';
+    '<div class="retro-leituras">'+lts+'</div><div class="retro-res"></div></div>';
 }
+function recalcBloco(el){
+  var b=el.closest(".retro-cor"); if(!b)return;
+  var cor=b.querySelector(".rt-cor").value;
+  var leit=Array.prototype.map.call(b.querySelectorAll(".rt-l"),function(i){return i.value;});
+  var med=mediaLeituras(leit);
+  var p=placas.find(function(x){return x.id===retroPlaca;});
+  var mn=p?minimoDe(p.pel,cor):null;
+  var res=b.querySelector(".retro-res");
+  if(med==null){res.innerHTML="";return;}
+  var t="Média: <b>"+((""+med).replace(".",","))+"</b>";
+  if(mn!=null){var ok=med>=mn;t+=' · Mín '+mn+' · <b style="color:'+(ok?"var(--verde)":"var(--vermelho)")+'">'+(ok?"APROVADO":"REPROVADO")+'</b>';}
+  res.innerHTML=t;
+}
+function recalcTodos(){Array.prototype.forEach.call(document.querySelectorAll("#retroCores .rt-cor"),function(s){recalcBloco(s);});}
 function addCor(cor,leituras){
   document.getElementById("retroCores").insertAdjacentHTML("beforeend",corBlocoHTML(cor,leituras));
   retroSujo=true;
@@ -494,6 +526,7 @@ function abrirRetro(id){
     addCor("Branca");
   }
   retroSujo=false;
+  recalcTodos();
   esconderTudo(); document.getElementById("vRetro").classList.remove("esconde"); vAtual="retro";
   document.getElementById("hdrTitulo").textContent="Retro · "+(p.cod||p.kmP||"");
   window.scrollTo(0,0);
@@ -616,6 +649,43 @@ function simNao(v){return v==="S"?"Sim":(v==="N"?"Não":"");}
 var COLS_PLAN=["Rodovia","Placa","Km","Fração","Suporte","Qtde Suporte","Altura do Suporte","Casca de Pinus","Tipo Película","Área (m²)","Fotos","Observação"];
 function linhaPlan(p){var k=splitKm(p.kmP);return[rodBase(), p.cod, k[0], k[1], p.sup, p.qtd, p.altura, simNao(p.pinus), p.pel||"", p.area, p.foto, p.obs||""];}
 function copiarPlanilha(){var med=placas.filter(function(p){return p.status==="medida";});if(!med.length){toast("Nenhuma placa medida ainda");return;}var txt=med.map(function(p){return linhaPlan(p).map(function(v){return v==null?"":(""+v);}).join("\t");}).join("\n");copiar(txt, med.length+" placas copiadas — cole na célula C27 da planilha");}
+function copiarRetro(){
+  var comR=placas.filter(temRetro);
+  if(!comR.length){toast("Nenhum ensaio de retro registrado");return;}
+  var linhas=[];
+  comR.forEach(function(p){
+    var lado=ladoCurto(p.cod);
+    var tipoExp=(p.pel||"").toUpperCase();
+    p.retro.cores.forEach(function(c,ci){
+      var med=mediaLeituras(c.leituras);
+      var mn=minimoDe(p.pel,c.cor);
+      var status=(med==null||mn==null)?"":(med>=mn?"APROVADO":"REPROVADO");
+      var L=c.leituras||[];
+      var prim=(ci===0); // primeira cor da placa leva os dados da placa; demais só cor + leituras
+      var row=[
+        prim?(p.foto||""):"",         // B Foto
+        "",                            // C Formato (preencher)
+        "",                            // D Classificação (preencher)
+        "",                            // E Data Fabricação (preencher)
+        prim?(p.retro.data||""):"",   // F Data Medição
+        prim?(p.kmP||""):"",          // G km
+        prim?lado:"",                 // H POSIÇÃO
+        "",                            // I (vazio)
+        "",                            // J Posição
+        prim?"0,2º":"",               // K Ângulo Observação
+        prim?"-4°":"",                // L Ângulo Entrada
+        prim?tipoExp:"",              // M Tipo Película
+        COR_EXP[c.cor]||c.cor,        // N Cor Película
+        L[0]||"",L[1]||"",L[2]||"",L[3]||"",L[4]||"", // O-S leituras 1-5
+        (med==null?"":(""+med).replace(".",",")),     // T Média
+        (mn==null?"":(""+mn)),        // U Mínimo NBR
+        status                         // V Status
+      ];
+      linhas.push(row.join("\t"));
+    });
+  });
+  copiar(linhas.join("\n"), comR.length+" placa(s) de retro copiadas — cole na aba de retro (B13)");
+}
 var COLS_CSV=COLS_PLAN.concat(["Km Instalado (S/N)","Medição","Empresa","Técnico","Data/Hora","Latitude","Longitude","Precisão GPS (m)"]);
 function linhaCSV(p){return linhaPlan(p).concat([simNao(p.kmOk),cfg.medicao||"",cfg.empresa||"",cfg.tecnico||"",p.dataHora||"",p.lat||"",p.lng||"",p.gpsAcc||""]);}
 function montaCSV(){var c=";";var h=COLS_CSV.join(c);var corpo=placas.filter(function(p){return p.status==="medida";}).map(function(p){return linhaCSV(p).map(campoCSV).join(c);}).join("\r\n");return "\uFEFF"+h+"\r\n"+corpo;}
