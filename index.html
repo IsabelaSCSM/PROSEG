@@ -215,6 +215,7 @@
         <div id="retroCores"></div>
         <button class="btn btn-linha" onclick="addCor()">+ Adicionar cor</button>
         <button class="btn btn-primario" style="margin-top:14px" onclick="salvarRetro()">Salvar ensaio</button>
+        <button class="btn" id="btnExcluirRetro" style="margin-top:8px;background:#fff;color:var(--vermelho);border:2px solid var(--vermelho);display:none" onclick="excluirRetro()">🗑 Excluir ensaio</button>
       </div>
     </section>
 
@@ -482,10 +483,13 @@ function abrirRetro(id){
     '<span>Lado: <b>'+esc(ladoDe(p.cod))+'</b></span><span>Película: <b>'+esc(p.pel||"--")+'</b></span>'+
     '<span>Foto: <b>'+esc(p.foto||"--")+'</b></span></div>';
   var cont=document.getElementById("retroCores"); cont.innerHTML="";
+  var btnEx=document.getElementById("btnExcluirRetro");
   if(temRetro(p)){
+    if(btnEx)btnEx.style.display="";
     document.getElementById("retroData").value=p.retro.data||"";
     p.retro.cores.forEach(function(c){addCor(c.cor,c.leituras);});
   }else{
+    if(btnEx)btnEx.style.display="none";
     document.getElementById("retroData").value="";
     addCor("Branca");
   }
@@ -500,6 +504,16 @@ function fecharRetro(){
   esconderTudo(); document.getElementById("vFicha").classList.remove("esconde"); vAtual="ficha";
   var p=placas.find(function(x){return x.id===retroPlaca;});
   document.getElementById("hdrTitulo").textContent="Km "+((p&&p.kmP)||"--");
+}
+function excluirRetro(){
+  var p=placas.find(function(x){return x.id===retroPlaca;}); if(!p)return;
+  if(!temRetro(p)){toast("Esta placa não tem ensaio");return;}
+  if(!confirm("Excluir o ensaio de retro desta placa? Esta ação não pode ser desfeita.")) return;
+  p.retro=null;
+  persist(); retroSujo=false;
+  toast("Ensaio de retro excluído ✓");
+  esconderTudo(); document.getElementById("vFicha").classList.remove("esconde"); vAtual="ficha";
+  document.getElementById("hdrTitulo").textContent="Km "+(p.kmP||"--");
 }
 function salvarRetro(){
   var p=placas.find(function(x){return x.id===retroPlaca;}); if(!p)return;
