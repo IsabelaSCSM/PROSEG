@@ -105,6 +105,16 @@
   .rod .selo.off{background:var(--cinza-cl);color:var(--cinza)}
   .dlbar{height:8px;background:var(--cinza-cl);border-radius:6px;overflow:hidden;margin-top:8px}
   .dlbar i{display:block;height:100%;background:var(--verde);width:0;transition:width .2s}
+  .retro-cor{border:2px solid var(--linha);border-radius:12px;padding:12px;margin-bottom:12px;background:#fbfcfb}
+  .retro-cor .topo{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+  .retro-cor select{flex:1;padding:13px;font-size:16px;border:2px solid var(--linha);border-radius:10px;background:#fff;font-weight:700;color:var(--tinta)}
+  .retro-cor .rm{flex:0 0 auto;width:46px;height:46px;border:2px solid var(--vermelho);color:var(--vermelho);background:#fff;border-radius:10px;font-size:18px;font-weight:800;cursor:pointer}
+  .retro-leituras{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .retro-leituras .lt{display:flex;flex-direction:column;gap:3px}
+  .retro-leituras .lt label{font-size:11px;font-weight:700;color:var(--cinza);text-transform:uppercase;letter-spacing:.3px;margin:0}
+  .retro-leituras .lt input{padding:11px;font-size:16px;margin:0}
+  .badge-r{display:inline-flex;align-items:center;justify-content:center;width:21px;height:21px;border-radius:50%;background:var(--amarelo);color:#5a4a00;font-size:12px;font-weight:800;margin-left:6px;flex:0 0 auto}
+  .btn-retro{background:#fff;color:var(--verde);border:2px solid var(--verde);margin-top:4px}
 </style>
 </head>
 <body>
@@ -148,7 +158,8 @@
         <h2 id="fichaKm">Km --</h2>
         <p class="dica" id="fichaCod">Codigo</p>
         <div class="ctx" id="fichaCtx"></div>
-        <div class="grupo">
+        <button class="btn btn-retro" onclick="abrirRetro(atual)">🔦 Realizar Retro</button>
+        <div class="grupo" style="margin-top:14px">
           <label class="campo">Instalada no Km correto?</label>
           <div class="toggle" id="tgKm">
             <button type="button" data-v="S" onclick="setToggle('tgKm','S',this)">Sim</button>
@@ -185,6 +196,22 @@
         <button class="btn btn-primario" onclick="salvarFicha(true)">Salvar e ir para a próxima</button>
         <button class="btn btn-sec" style="margin-top:8px" onclick="salvarFicha(false)">Salvar e voltar à lista</button>
         <button class="btn" id="btnPendente" style="margin-top:8px;background:#fff;color:var(--vermelho);border:2px solid var(--vermelho)" onclick="marcarPendente()">↩ Marcar como pendente</button>
+      </div>
+    </section>
+
+    <!-- RETRO -->
+    <section id="vRetro" class="esconde">
+      <div class="cartao">
+        <button class="btn btn-sec" style="margin-bottom:14px" onclick="fecharRetro()">← Voltar</button>
+        <h2>Ensaio de Retrorrefletância</h2>
+        <div class="ctx" id="retroResumo"></div>
+        <div class="grupo">
+          <label class="campo">Data do ensaio</label>
+          <input type="text" id="retroData" inputmode="numeric" placeholder="dd/mm/aaaa" oninput="retroSujo=true">
+        </div>
+        <div id="retroCores"></div>
+        <button class="btn btn-linha" onclick="addCor()">+ Adicionar cor</button>
+        <button class="btn btn-primario" style="margin-top:14px" onclick="salvarRetro()">Salvar ensaio</button>
       </div>
     </section>
 
@@ -259,7 +286,7 @@ var atual=null, sujo=false, gpsTmp=null, atualGrupo=[], vAtual="rod", filtroStat
 
 function novaLista(arr){return arr.map(function(d,i){return{
   id:"p"+i, imgIdx:i, cod:d.cod, kmP:d.kmP, sup:d.sup, qtd:d.qtd, larg:d.larg, altP:d.altP, area:d.area, pel:d.pel||"",
-  status:"pendente", kmOk:"", altura:"", pinus:"", foto:"", obs:"", lat:"",lng:"",gpsAcc:"", dataHora:""
+  status:"pendente", kmOk:"", altura:"", pinus:"", foto:"", obs:"", lat:"",lng:"",gpsAcc:"", dataHora:"", retro:null
 };});}
 function persist(){ if(DB&&rodAtual) idbPut("trab",rodAtual,placas); }
 
@@ -344,9 +371,10 @@ async function baixarTodas(){
 }
 
 /* ====== Navegação interna ====== */
-function esconderTudo(){ ["Rod","Lista","Ficha","Config","Export","Lote","LoteForm"].forEach(function(s){document.getElementById("v"+s).classList.add("esconde");}); }
+function esconderTudo(){ ["Rod","Lista","Ficha","Config","Export","Lote","LoteForm","Retro"].forEach(function(s){document.getElementById("v"+s).classList.add("esconde");}); }
 function irPara(v){
   if(vAtual==="ficha" && v!=="ficha" && sujo){ if(!confirm("Há alterações não salvas. Sair sem salvar?")) return; sujo=false; }
+  if(vAtual==="retro" && v!=="retro" && retroSujo){ if(!confirm("Há um ensaio de retro não salvo. Sair sem salvar?")) return; retroSujo=false; }
   esconderTudo();
   ["tLista","tExport","tConfig"].forEach(function(t){document.getElementById(t).classList.remove("ativo");});
   var titulo=rodAtual||"PROSEG";
@@ -382,7 +410,7 @@ function renderLista(){
     return '<div class="placa '+(f?"medida":"")+'" onclick="abrirFicha(\''+p.id+'\')">'+
       thumb+
       '<div class="km"><b>KM</b><span>'+esc(p.kmP||"--")+'</span></div>'+
-      '<div class="info"><div class="cod">'+esc(p.cod||"Sem código")+'</div>'+
+      '<div class="info"><div class="cod">'+esc(p.cod||"Sem código")+(temRetro(p)?'<span class="badge-r" title="Ensaio de retro registrado">R</span>':'')+'</div>'+
       '<div class="det">'+(f?("Alt "+(p.altura||"--")+" m · Pinus "+(p.pinus||"--")+" · Foto "+(p.foto||"--")):esc(resumoSup(p.sup))) +'</div></div>'+
       '<div class="selo '+(f?"feito":"pend")+'">'+(f?"MEDIDA":"PENDENTE")+'</div></div>';
   }).join("");
@@ -416,6 +444,75 @@ function abrirFicha(id){
   document.getElementById("hdrTitulo").textContent="Km "+(p.kmP||"--");
 }
 function voltarFicha(){sujo=false;irPara("lista");}
+
+/* ====== Retrorrefletância ====== */
+var CORES_RETRO=["Branca","Vermelha","Amarela","Lima Limão","Azul","Verde","Marrom","Laranja"];
+var retroSujo=false, retroPlaca=null;
+function temRetro(p){return !!(p&&p.retro&&p.retro.cores&&p.retro.cores.length);}
+function ladoDe(cod){var c=(cod||"").toUpperCase();if(/LD/.test(c))return "Direito";if(/LE/.test(c))return "Esquerdo";if(/LC/.test(c))return "Central";return "--";}
+function corOptions(sel){return CORES_RETRO.map(function(c){return '<option value="'+c+'"'+(c===sel?" selected":"")+'>'+c+'</option>';}).join("");}
+function corBlocoHTML(cor,leituras){
+  leituras=leituras||["","","","",""];
+  var lts="";
+  for(var i=0;i<5;i++){lts+='<div class="lt"><label>Leitura '+(i+1)+'</label><input type="text" inputmode="decimal" class="rt-l" placeholder="0,0" value="'+esc(leituras[i]||"")+'" oninput="retroSujo=true"></div>';}
+  return '<div class="retro-cor">'+
+    '<div class="topo"><select class="rt-cor" onchange="retroSujo=true">'+corOptions(cor||"Branca")+'</select>'+
+    '<button type="button" class="rm" onclick="removerCor(this)" title="Excluir cor">✕</button></div>'+
+    '<div class="retro-leituras">'+lts+'</div></div>';
+}
+function addCor(cor,leituras){
+  document.getElementById("retroCores").insertAdjacentHTML("beforeend",corBlocoHTML(cor,leituras));
+  retroSujo=true;
+}
+function removerCor(btn){
+  var bloco=btn.closest(".retro-cor"); if(bloco){bloco.parentNode.removeChild(bloco);retroSujo=true;}
+}
+function abrirRetro(id){
+  var p=placas.find(function(x){return x.id===id;}); if(!p)return;
+  retroPlaca=id;
+  var ix=(p.imgIdx!=null?p.imgIdx:parseInt(String(p.id).slice(1),10));
+  document.getElementById("retroResumo").innerHTML=
+    '<div class="grid"><span>Placa: <b>'+esc(p.cod||"--")+'</b></span><span>KM: <b>'+esc(p.kmP||"--")+'</b></span>'+
+    '<span>Lado: <b>'+esc(ladoDe(p.cod))+'</b></span><span>Película: <b>'+esc(p.pel||"--")+'</b></span>'+
+    '<span>Foto: <b>'+esc(p.foto||"--")+'</b></span></div>';
+  var cont=document.getElementById("retroCores"); cont.innerHTML="";
+  if(temRetro(p)){
+    document.getElementById("retroData").value=p.retro.data||"";
+    p.retro.cores.forEach(function(c){addCor(c.cor,c.leituras);});
+  }else{
+    document.getElementById("retroData").value="";
+    addCor("Branca");
+  }
+  retroSujo=false;
+  esconderTudo(); document.getElementById("vRetro").classList.remove("esconde"); vAtual="retro";
+  document.getElementById("hdrTitulo").textContent="Retro · "+(p.cod||p.kmP||"");
+  window.scrollTo(0,0);
+}
+function fecharRetro(){
+  if(retroSujo && !confirm("Há um ensaio de retro não salvo. Sair sem salvar?")) return;
+  retroSujo=false;
+  esconderTudo(); document.getElementById("vFicha").classList.remove("esconde"); vAtual="ficha";
+  var p=placas.find(function(x){return x.id===retroPlaca;});
+  document.getElementById("hdrTitulo").textContent="Km "+((p&&p.kmP)||"--");
+}
+function salvarRetro(){
+  var p=placas.find(function(x){return x.id===retroPlaca;}); if(!p)return;
+  var blocos=document.querySelectorAll("#retroCores .retro-cor");
+  var cores=[];
+  Array.prototype.forEach.call(blocos,function(b){
+    var cor=b.querySelector(".rt-cor").value;
+    var leituras=Array.prototype.map.call(b.querySelectorAll(".rt-l"),function(i){return (i.value||"").replace(".",",").trim();});
+    cores.push({cor:cor,leituras:leituras});
+  });
+  if(!cores.length){toast("Adicione ao menos uma cor");return;}
+  var data=document.getElementById("retroData").value.trim();
+  if(!data){data=new Date().toLocaleDateString("pt-BR");}
+  p.retro={data:data,cores:cores};
+  persist(); retroSujo=false;
+  toast("Ensaio de retro salvo ✓");
+  esconderTudo(); document.getElementById("vFicha").classList.remove("esconde"); vAtual="ficha";
+  document.getElementById("hdrTitulo").textContent="Km "+(p.kmP||"--");
+}
 function sugereFoto(){var n=placas.map(function(p){return parseInt(p.foto,10);}).filter(function(x){return !isNaN(x);});return n.length?(Math.max.apply(null,n)+1):"";}
 function setToggle(boxId,val,btn){var box=document.getElementById(boxId);Array.prototype.forEach.call(box.children,function(b){b.classList.remove("sel-sim","sel-nao");});btn.classList.add(val==="N"?"sel-nao":"sel-sim");box.dataset.val=val;marcaSujo();}
 function marcaToggle(boxId,val){var box=document.getElementById(boxId);box.dataset.val=val||"";Array.prototype.forEach.call(box.children,function(b){b.classList.remove("sel-sim","sel-nao");if(b.dataset.v===val)b.classList.add(val==="N"?"sel-nao":"sel-sim");});}
@@ -492,7 +589,7 @@ function salvarLote(){
 
 /* ====== Exportação ====== */
 function renderResumo(){document.getElementById("rOk").textContent=placas.filter(function(p){return p.status==="medida";}).length;document.getElementById("rPend").textContent=placas.filter(function(p){return p.status!=="medida";}).length;}
-function splitKm(s){s=(s||"").trim();var p=s.split("+");var km=p[0]||"";var m=(p.length>1?p[1]:"").split(",")[0].trim();return[km,m];}
+function splitKm(s){s=(s||"").trim();var p=s.split("+");var km=p[0]||"";var m=(p.length>1?p[1]:"");m=m.split(",")[0].split(".")[0].trim();return[km,m];}
 function rodBase(){return (rodAtual||"").replace(/\s*\(.*\)\s*$/,"").trim();}
 function simNao(v){return v==="S"?"Sim":(v==="N"?"Não":"");}
 // 12 colunas para colar a partir de C27 na planilha de medição
