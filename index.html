@@ -726,13 +726,74 @@ function renderLoteForm(gr,i){
     '<p class="dica">km '+esc(a)+' a '+esc(b)+' · '+gr.itens.length+' marcadores. Defina os itens comuns e digite a altura só nos que mediu.</p>'+
     '<div class="grupo"><label class="campo">Todas instaladas no Km correto?</label><div class="toggle" id="lgKm"><button type="button" data-v="S" onclick="setToggle(\'lgKm\',\'S\',this)">Sim</button><button type="button" data-v="N" onclick="setToggle(\'lgKm\',\'N\',this)">Não</button></div></div>'+
     '<div class="grupo"><label class="campo">Casca de pinus (todas)</label><div class="toggle" id="lgPinus"><button type="button" data-v="S" onclick="setToggle(\'lgPinus\',\'S\',this)">Sim</button><button type="button" data-v="N" onclick="setToggle(\'lgPinus\',\'N\',this)">Não</button></div></div>'+
-    '<div class="grupo"><label class="campo">Fotos do grupo (2)</label><div style="display:flex;gap:8px"><input type="text" inputmode="numeric" id="lFoto1" placeholder="Foto 1" value="'+esc(splitFoto(f0.foto,0))+'"><input type="text" inputmode="numeric" id="lFoto2" placeholder="Foto 2" value="'+esc(splitFoto(f0.foto,1))+'"></div></div>'+
+    '<div class="grupo"><label class="campo">Fotos georreferenciadas do grupo (2)</label>'+
+    '<div style="display:flex;gap:10px">'+
+      '<div style="flex:1"><input type="text" inputmode="numeric" id="lFoto1" placeholder="Foto 1" value="'+esc(splitFoto(f0.foto,0))+'" style="margin-bottom:6px"><button class="btn btn-linha" style="padding:10px;font-size:14px" onclick="tirarFotoLote(1)">📷 Foto 1</button><div id="lPrev1"></div></div>'+
+      '<div style="flex:1"><input type="text" inputmode="numeric" id="lFoto2" placeholder="Foto 2" value="'+esc(splitFoto(f0.foto,1))+'" style="margin-bottom:6px"><button class="btn btn-linha" style="padding:10px;font-size:14px" onclick="tirarFotoLote(2)">📷 Foto 2</button><div id="lPrev2"></div></div>'+
+    '</div>'+
+    '<input type="file" id="lFotoCam" accept="image/*" capture="environment" style="display:none" onchange="processaFotoLote(this)"></div>'+
     '<label class="campo">Altura por marcador (m)</label>'+
     '<div class="lote-lista">'+rows+'</div>'+
     '<button class="btn btn-primario" style="margin-top:14px" onclick="salvarLote()">Salvar lote ('+gr.itens.length+')</button>';
+  loteF0=f0.id; loteKmStr=esc(a)+" a "+esc(b);
   marcaToggle("lgKm", f0.kmOk||"S");
   marcaToggle("lgPinus", f0.pinus||"");
+  mostraPrevLote();
   sujo=false;
+}
+var loteF0=null, loteQual=1, loteKmStr="";
+function proxFotoNum(){
+  var nums=[];
+  placas.forEach(function(p){(""+(p.foto||"")).split("/").forEach(function(x){var n=parseInt(x,10);if(!isNaN(n))nums.push(n);});});
+  [1,2].forEach(function(q){var el=document.getElementById("lFoto"+q);if(el){var n=parseInt(el.value,10);if(!isNaN(n))nums.push(n);}});
+  return nums.length?Math.max.apply(null,nums)+1:1;
+}
+function tirarFotoLote(qual){
+  loteQual=qual;
+  var el=document.getElementById("lFoto"+qual);
+  if(!(el.value||"").trim()){el.value=proxFotoNum();sujo=true;}
+  fotoGps=null;
+  if(navigator.geolocation){toast("Obtendo GPS...");navigator.geolocation.getCurrentPosition(function(pos){fotoGps={lat:pos.coords.latitude,lng:pos.coords.longitude,acc:Math.round(pos.coords.accuracy)};toast("GPS pronto — tire a foto");},function(){fotoGps=null;},{enableHighAccuracy:true,timeout:15000,maximumAge:0});}
+  document.getElementById("lFotoCam").click();
+}
+function processaFotoLote(input){
+  var file=input.files&&input.files[0]; if(!file){input.value="";return;}
+  var qual=loteQual; var f0=placas.find(function(x){return x.id===loteF0;}); if(!f0){input.value="";return;}
+  var idx=(document.getElementById("lFoto"+qual).value||"").trim();
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var img=new Image();
+    img.onload=function(){
+      var maxE=1600,w=img.width,h=img.height,s=Math.min(1,maxE/Math.max(w,h));
+      var cw=Math.round(w*s),ch=Math.round(h*s);
+      var cv=document.createElement("canvas");cv.width=cw;cv.height=ch;var ctx=cv.getContext("2d");ctx.drawImage(img,0,0,cw,ch);
+      var g=fotoGps;
+      desenhaCarimbo(ctx,cw,ch,{g:g,rod:cfg.rodovia||"",km:loteKmStr,idx:idx});
+      var full=cv.toDataURL("image/jpeg",0.85);
+      if(g){try{full=injetaGPS(full,g);}catch(err){}}
+      var ts=Math.min(1,300/Math.max(cw,ch)),tw=Math.round(cw*ts),th2=Math.round(ch*ts);
+      var tcv=document.createElement("canvas");tcv.width=tw;tcv.height=th2;tcv.getContext("2d").drawImage(cv,0,0,tw,th2);
+      f0["loteThumb"+qual]=tcv.toDataURL("image/jpeg",0.6); f0["loteGps"+qual]=g?(g.lat.toFixed(6)+", "+g.lng.toFixed(6)):"";
+      persist(); sujo=true; mostraPrevLote();
+      var nome=(cfg.rodovia||"foto").replace(/[^A-Za-z0-9-]/g,"")+"_"+idx+".jpg";
+      compartilhaFoto(full,nome);
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file); input.value="";
+}
+function mostraPrevLote(){
+  var f0=placas.find(function(x){return x.id===loteF0;});
+  [1,2].forEach(function(q){
+    var el=document.getElementById("lPrev"+q); if(!el)return;
+    if(f0&&f0["loteThumb"+q]){el.innerHTML='<img src="'+f0["loteThumb"+q]+'" style="margin-top:8px;max-width:100%;border-radius:8px;border:2px solid var(--linha);display:block"><div class="dica" style="margin-top:3px">'+(f0["loteGps"+q]?("GPS ✓ "+esc(f0["loteGps"+q])):"sem GPS")+'</div><button class="btn" style="margin-top:6px;padding:8px;font-size:13px;background:#fff;color:var(--vermelho);border:2px solid var(--vermelho)" onclick="apagarFotoLote('+q+')">🗑 Apagar</button>';}
+    else{el.innerHTML="";}
+  });
+}
+function apagarFotoLote(q){
+  var f0=placas.find(function(x){return x.id===loteF0;}); if(!f0)return;
+  if(!confirm("Apagar a Foto "+q+" deste grupo? A imagem já salva na galeria não é afetada."))return;
+  f0["loteThumb"+q]="";f0["loteGps"+q]="";var el=document.getElementById("lFoto"+q);if(el)el.value="";persist();sujo=true;mostraPrevLote();toast("Foto "+q+" removida");
 }
 function salvarLote(){
   var km=document.getElementById("lgKm").dataset.val||"S";
