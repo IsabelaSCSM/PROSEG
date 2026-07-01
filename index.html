@@ -258,7 +258,7 @@
       </div>
       <div class="cartao">
         <h2>Enviar para a planilha de medição</h2>
-        <p class="dica">Gera as <b>12 colunas</b> da sua planilha (RODOVIA → OBSERVAÇÃO), só as placas medidas. Cole na célula <b>C27</b>.</p>
+        <p class="dica">Gera as <b>13 colunas</b> da sua planilha (RODOVIA · EIXO → OBSERVAÇÃO), só as placas medidas. Cole na célula <b>C27</b>.</p>
         <button class="btn btn-primario" onclick="copiarPlanilha()">⧉ Copiar para colar na planilha (a partir de C27)</button>
         <button class="btn btn-linha" style="margin-top:8px" onclick="baixarCSV()">⬇ Baixar CSV completo (com GPS e data)</button>
         <button class="btn btn-sec" style="margin-top:8px" onclick="compartilhar()">↗ Enviar arquivo por WhatsApp / e-mail</button>
@@ -430,7 +430,7 @@ function renderLista(){
       thumb+
       '<div class="km"><b>KM</b><span>'+esc(p.kmP||"--")+'</span></div>'+
       '<div class="info"><div class="cod">'+esc(p.cod||"Sem código")+'</div>'+
-      '<div class="det">'+(f?("Alt "+(p.altura||"--")+" m · Pinus "+(p.pinus||"--")+" · Foto "+(p.foto||"--")):esc(resumoSup(p.sup))) +'</div></div>'+
+      '<div class="det">'+(f?("Alt "+(p.altura||"--")+" m · Pinus "+(p.pinus||"--")+" · Foto "+(p.foto||"--")):esc(resumoSup(p.sup))) +'</div>'+(eixoDifere(p)?'<div class="det" style="color:#a8600c;font-weight:700">⚠ Eixo '+esc(fmtEixo(p.eixo))+'</div>':'')+'</div>'+
       '<div class="selo '+seloCls+'">'+seloTxt+'</div></div>';
   }).join("");
   atualizaProg();
@@ -451,7 +451,9 @@ function abrirFicha(id){
     (_img?'<img class="placa-img" src="'+_img+'" onclick="zoom('+_ix+')" alt="Projeto da placa">':'')+
     "<b>Projeto:</b> "+esc(p.sup||"--")+
     '<div class="grid"><span>Qtde: <b>'+esc(p.qtd||"--")+'</b></span><span>Área: <b>'+esc(p.area||"--")+'</b> m²</span>'+
-    '<span>Dim.: <b>'+esc(p.larg||"--")+' × '+esc(p.altP||"--")+'</b> m</span><span>Película: <b>'+esc(p.pel||"--")+'</b></span></div>';
+    '<span>Dim.: <b>'+esc(p.larg||"--")+' × '+esc(p.altP||"--")+'</b> m</span><span>Película: <b>'+esc(p.pel||"--")+'</b></span>'+
+    '<span>Eixo: <b>'+esc(fmtEixo(p.eixo)||"--")+'</b></span></div>'+
+    (eixoDifere(p)?'<div style="margin-top:8px;background:#fbe7d2;color:#8a4b06;border-radius:8px;padding:9px 11px;font-size:13px;font-weight:600;line-height:1.4">⚠ Interseção: esta placa está no eixo <b>'+esc(fmtEixo(p.eixo))+'</b>. O km refere-se a essa rodovia, não à '+esc(normEixo(rodBase()))+'.</div>':'');
   document.getElementById("fAltura").value=p.altura||"";
   document.getElementById("fFoto").value=p.foto||sugereFoto();
   document.getElementById("fObs").value=p.obs||"";
@@ -812,7 +814,10 @@ function rodBase(){return (rodAtual||"").replace(/\s*\(.*\)\s*$/,"").trim();}
 function simNao(v){return v==="S"?"Sim":(v==="N"?"Não":"");}
 // 12 colunas para colar a partir de C27 na planilha de medição
 var COLS_PLAN=["Rodovia","Placa","Km","Fração","Suporte","Qtde Suporte","Altura do Suporte","Casca de Pinus","Tipo Película","Área (m²)","Fotos","Observação"];
-function linhaPlan(p){var k=splitKm(p.kmP);return[rodBase(), p.cod, k[0], k[1], p.sup, p.qtd, p.altura, simNao(p.pinus), p.pel||"", p.area, p.foto, p.obs||""];}
+function fmtEixo(s){return (s||"").trim().replace(/\s+/g,"-").replace(/-+/g,"-");}
+function normEixo(s){return fmtEixo(s).toUpperCase().replace(/^PRC-/,"PR-");}
+function eixoDifere(p){var e=normEixo(p&&p.eixo);return e!=="" && e!==normEixo(rodBase());}
+function linhaPlan(p){var k=splitKm(p.kmP);return[rodBase(), fmtEixo(p.eixo), p.cod, k[0], k[1], p.sup, p.qtd, p.altura, simNao(p.pinus), p.pel||"", p.area, p.foto, p.obs||""];}
 function copiarPlanilha(){var med=placas.filter(function(p){return p.status==="medida";});if(!med.length){toast("Nenhuma placa medida ainda");return;}var txt=med.map(function(p){return linhaPlan(p).map(function(v){return v==null?"":(""+v);}).join("\t");}).join("\n");copiar(txt, med.length+" placas copiadas — cole na célula C27 da planilha");}
 function copiarRetro(){
   var comR=placas.filter(temRetro);
