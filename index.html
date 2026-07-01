@@ -301,7 +301,7 @@ var manifest=[], rodAtual=null, placas=[], IMGS=[], cfg={empresa:"",tecnico:"",m
 var atual=null, sujo=false, gpsTmp=null, atualGrupo=[], vAtual="rod", filtroStatus="todas";
 
 function novaLista(arr){return arr.map(function(d,i){return{
-  id:"p"+i, imgIdx:i, cod:d.cod, kmP:d.kmP, sup:d.sup, qtd:d.qtd, larg:d.larg, altP:d.altP, area:d.area, pel:d.pel||"",
+  id:"p"+i, imgIdx:i, cod:d.cod, kmP:d.kmP, sup:d.sup, qtd:d.qtd, larg:d.larg, altP:d.altP, area:d.area, pel:d.pel||"", eixo:d.eixo||"",
   status:"pendente", kmOk:"", altura:"", pinus:"", foto:"", obs:"", lat:"",lng:"",gpsAcc:"", dataHora:"", retro:null, fotoThumb:"", fotoGps:""
 };});}
 function persist(){ if(DB&&rodAtual) idbPut("trab",rodAtual,placas); }
@@ -346,20 +346,29 @@ async function mostraRodovias(){
 }
 async function abrirRodovia(cod){
   var ref = DB? await idbGet("ref",cod) : null;
-  if(!ref){
+  var stale = ref && ref.placas && ref.placas.length && !("eixo" in ref.placas[0]);
+  if(!ref || stale){
     var it=manifest.find(function(x){return x.codigo===cod;});
-    if(!it){ toast("Rodovia não encontrada"); return; }
-    toast("Baixando "+cod+"...");
-    try{
-      var r=await fetch(it.arquivo+"?ts="+Date.now()); if(!r.ok) throw 0;
-      ref=await r.json();
-      if(DB) await idbPut("ref",cod,ref);
-    }catch(e){ toast("Sem conexão. Baixe esta rodovia na base, com internet."); return; }
+    if(!it && !ref){ toast("Rodovia não encontrada"); return; }
+    if(it){
+      if(!ref) toast("Baixando "+cod+"...");
+      try{
+        var r=await fetch(it.arquivo+"?ts="+Date.now()); if(!r.ok) throw 0;
+        ref=await r.json();
+        if(DB) await idbPut("ref",cod,ref);
+      }catch(e){ if(!ref){ toast("Sem conexão. Baixe esta rodovia na base, com internet."); return; } }
+    }
   }
   IMGS = ref.imgs||[];
   var trab = DB? await idbGet("trab",cod) : null;
   if(!trab || !trab.length){ trab=novaLista(ref.placas||[]); if(DB) await idbPut("trab",cod,trab); }
   placas=trab; rodAtual=cod; cfg.rodovia=cod;
+  // preenche o eixo em cópias de trabalho criadas antes do eixo existir
+  var _refP=ref.placas||[], _mud=false;
+  placas.forEach(function(p){
+    if(p.eixo==null){ var ix=(p.imgIdx!=null?p.imgIdx:parseInt(String(p.id).slice(1),10)); var rp=_refP[ix]; if(rp){ p.eixo=rp.eixo||""; _mud=true; } }
+  });
+  if(_mud && DB) idbPut("trab",cod,placas);
   document.getElementById("barraProg").classList.remove("esconde");
   document.getElementById("navTabs").classList.remove("esconde");
   irPara("lista");
@@ -374,8 +383,10 @@ async function baixarTodas(){
   for(var i=0;i<manifest.length;i++){
     var it=manifest[i];
     var have = DB? await idbGet("ref",it.codigo) : null;
-    if(!have){
-      try{ var r=await fetch(it.arquivo+"?ts="+Date.now()); if(!r.ok) throw 0; var d=await r.json(); if(DB) await idbPut("ref",it.codigo,d); }
+    var staleH = have && have.placas && have.placas.length && !("eixo" in have.placas[0]);
+    if(!have || staleH){
+      try{ var r=await fetch(it.arquivo+"?ts="+Date.now()); if(!r.ok) throw 0; var d=await r.json(); if(DB){ await idbPut("ref",it.codigo,d);
+             var tr=await idbGet("trab",it.codigo); if(tr&&tr.length){ tr.forEach(function(p,ix){ if(p.eixo==null){ var rp=(d.placas||[])[p.imgIdx!=null?p.imgIdx:ix]; if(rp) p.eixo=rp.eixo||""; } }); await idbPut("trab",it.codigo,tr); } } }
       catch(e){ /* segue */ }
     }
     var temAgora = DB? await idbGet("ref",it.codigo) : null; if(temAgora) ok++;
